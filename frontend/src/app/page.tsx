@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import LeadForm from "@/components/LeadForm";
 import QualificationResult from "@/components/QualificationResult";
 
@@ -16,6 +17,12 @@ type LeadResult = {
   score: number;
   label: "Hot Lead" | "Warm Lead" | "Cold Lead" | "Disqualified";
   reasoning: string;
+};
+
+type SubscriptionInfo = {
+  isPaid: boolean;
+  usedToday: number;
+  dailyLimit: number;
 };
 
 const LOADING_MESSAGES = [
@@ -57,11 +64,23 @@ export default function Home() {
   const [result, setResult] = useState<LeadResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [limitReached, setLimitReached] = useState(false);
+  const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
+
+  useEffect(() => {
+    fetch("/api/user/subscription")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.error) setSubscription(data as SubscriptionInfo);
+      })
+      .catch(() => null);
+  }, [result]); // re-fetch after each qualification to update the counter
 
   async function handleSubmit(lead: Lead) {
     setIsLoading(true);
     setError(null);
     setResult(null);
+    setLimitReached(false);
 
     try {
       const response = await fetch("/api/qualify", {
@@ -71,6 +90,11 @@ export default function Home() {
       });
 
       const data = await response.json();
+
+      if (response.status === 402) {
+        setLimitReached(true);
+        return;
+      }
 
       if (!response.ok) {
         setError(data.error ?? "Something went wrong. Please try again.");
@@ -84,6 +108,12 @@ export default function Home() {
       setIsLoading(false);
     }
   }
+
+  const showUsageBar =
+    subscription && !subscription.isPaid;
+
+  const usageAtLimit =
+    showUsageBar && subscription.usedToday >= subscription.dailyLimit;
 
   return (
     <div className="min-h-screen bg-[#070911] flex flex-col items-center py-16 px-4">
@@ -99,6 +129,15 @@ export default function Home() {
 
       {/* Header */}
       <div className="relative w-full max-w-xl mb-10 text-center">
+        <Link
+          href="/upgrade"
+          className="absolute right-0 top-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-500/10 border border-violet-500/25 text-violet-400 text-xs font-medium hover:bg-violet-500/15 transition-colors"
+        >
+          Upgrade to Pro
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+          </svg>
+        </Link>
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-500/8 border border-violet-500/20 text-violet-400 text-xs uppercase tracking-widest mb-6">
           <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
           Powered by Claude AI
@@ -117,10 +156,77 @@ export default function Home() {
         <LeadForm onSubmit={handleSubmit} isLoading={isLoading} />
       </div>
 
+      {/* Free-tier usage counter */}
+      {showUsageBar && (
+        <div className="w-full max-w-xl mt-3 flex items-center justify-between px-1">
+          <p
+            className={`text-xs ${usageAtLimit ? "text-amber-400" : "text-slate-500"}`}
+          >
+            {subscription.usedToday}/{subscription.dailyLimit} free qualifications used today
+          </p>
+          <Link
+            href="/upgrade"
+            className="text-xs text-violet-400 hover:text-violet-300 transition-colors"
+          >
+            Upgrade for unlimited →
+          </Link>
+        </div>
+      )}
+
       {/* Loading */}
       {isLoading && <LoadingCard />}
 
-      {/* Error */}
+      {/* Limit-reached upgrade prompt */}
+      {limitReached && !isLoading && (
+        <div className="w-full max-w-xl mt-6 bg-[#0e1120] border border-violet-500/25 rounded-2xl px-6 py-5">
+          <div className="flex items-start gap-4">
+            <div className="w-9 h-9 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center shrink-0">
+              <svg
+                className="w-4.5 h-4.5 text-violet-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.75}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
+                />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-slate-200">
+                Daily limit reached
+              </p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                You&apos;ve used your 2 free qualifications today. Upgrade to Pro for unlimited qualifications.
+              </p>
+              <Link
+                href="/upgrade"
+                className="inline-flex items-center gap-1.5 mt-3 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition-colors"
+              >
+                Upgrade to Pro — $29/month
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
+                  />
+                </svg>
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Generic error */}
       {error && !isLoading && (
         <div className="w-full max-w-xl mt-6 px-5 py-4 bg-red-500/8 border border-red-500/20 rounded-xl flex items-start gap-3">
           <svg
