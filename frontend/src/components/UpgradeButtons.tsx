@@ -17,14 +17,20 @@ export default function UpgradeButtons({ isPaid }: { isPaid: boolean }) {
         router.push("/login");
         return;
       }
-      const data = await res.json();
+      let data: { url?: string; error?: string };
+      try {
+        data = await res.json();
+      } catch {
+        setError(`Server error (${res.status}) — check Vercel environment variables (STRIPE_SECRET_KEY, STRIPE_PRICE_ID).`);
+        return;
+      }
       if (data.url) {
         router.push(data.url);
       } else {
         setError(data.error ?? "Something went wrong. Please try again.");
       }
     } catch {
-      setError("Network error. Please try again.");
+      setError("Network error — could not reach the server.");
     } finally {
       setLoading(false);
     }
