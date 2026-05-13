@@ -55,7 +55,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ url: session.url });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Stripe error";
-    console.error("[stripe/checkout]", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const type = (err as { type?: string })?.type ?? "unknown";
+    console.error("[stripe/checkout]", type, message);
+    return NextResponse.json({ error: `[${type}] ${message}` }, { status: 500 });
   }
 }
