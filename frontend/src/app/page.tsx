@@ -66,14 +66,34 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [limitReached, setLimitReached] = useState(false);
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
+  const [justUpgraded, setJustUpgraded] = useState(false);
 
   useEffect(() => {
-    fetch("/api/user/subscription")
-      .then((r) => r.json())
-      .then((data) => {
-        if (!data.error) setSubscription(data as SubscriptionInfo);
-      })
-      .catch(() => null);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("upgraded") === "true") {
+      // Sync subscription status directly from Stripe then refresh
+      fetch("/api/stripe/sync", { method: "POST" })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.isPaid) setJustUpgraded(true);
+        })
+        .catch(() => null)
+        .finally(() => {
+          // Clean up the URL
+          window.history.replaceState({}, "", "/");
+          fetch("/api/user/subscription")
+            .then((r) => r.json())
+            .then((data) => { if (!data.error) setSubscription(data as SubscriptionInfo); })
+            .catch(() => null);
+        });
+    } else {
+      fetch("/api/user/subscription")
+        .then((r) => r.json())
+        .then((data) => {
+          if (!data.error) setSubscription(data as SubscriptionInfo);
+        })
+        .catch(() => null);
+    }
   }, [result]); // re-fetch after each qualification to update the counter
 
   async function handleSubmit(lead: Lead) {
@@ -150,6 +170,16 @@ export default function Home() {
           qualification in seconds.
         </p>
       </div>
+
+      {/* Upgrade success banner */}
+      {justUpgraded && (
+        <div className="w-full max-w-xl mb-4 flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-sm">
+          <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+          </svg>
+          You&apos;re now on Pro — unlimited qualifications unlocked!
+        </div>
+      )}
 
       {/* Form Card */}
       <div className="w-full max-w-xl bg-[#0e1120] border border-white/6 rounded-2xl p-8">
